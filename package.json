@@ -1,0 +1,21 @@
+{
+  "name": "camel-up-online",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -n server,client -c yellow,cyan \"npm run dev -w @camelup/server\" \"npm run dev -w @camelup/client\"",
+    "build": "npm run build -w @camelup/client",
+    "start": "npm run start -w @camelup/server",
+    "tunnel": "cloudflared.exe tunnel --url http://localhost:3001",
+    "test": "npm test -w @camelup/shared",
+    "typecheck": "tsc -p packages/shared && tsc -p apps/server && tsc -p apps/client"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.1",
+    "typescript": "^5.6.3"
+  }
+}

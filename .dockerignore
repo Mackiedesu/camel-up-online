@@ -1,0 +1,4 @@
+node_modules
+apps/client/dist
+cloudflared.exe
+.git
