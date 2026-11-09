@@ -71,10 +71,10 @@ export function findCamel(track: CamelColor[][], camel: CamelColor): { space: nu
   throw new GameError(`Camel ${camel} not on track`);
 }
 
-/** Racing camels ordered from first to last place. */
+/** Racing camels ordered from first to last place. Space 0 holds camels carried counterclockwise past space 1 (least advanced). */
 export function getRanking(track: CamelColor[][]): RacingColor[] {
   const out: RacingColor[] = [];
-  for (let space = track.length - 1; space >= 1; space--) {
+  for (let space = track.length - 1; space >= 0; space--) {
     const stack = track[space];
     for (let i = stack.length - 1; i >= 0; i--) {
       const c = stack[i];
@@ -108,6 +108,7 @@ export function createGame(players: { id: string; name: string }[], rng: Rng = M
   track[TRACK_LENGTH + 1 - rollValue(rng)].push(firstCrazy);
   track[TRACK_LENGTH + 1 - rollValue(rng)].push(secondCrazy);
 
+  const startIdx = Math.floor(rng() * players.length);
   return {
     phase: 'playing',
     players: players.map((p) => ({
@@ -117,9 +118,11 @@ export function createGame(players: { id: string; name: string }[], rng: Rng = M
       legBets: [],
       pyramidTickets: 0,
       spectator: null,
+      partnerId: null,
       usedFinalCards: [],
     })),
-    currentPlayerIndex: Math.floor(rng() * players.length),
+    currentPlayerIndex: startIdx,
+    startingPlayerIndex: startIdx,
     leg: 1,
     turn: 1,
     track,
@@ -139,7 +142,12 @@ export function canPlaceSpectator(state: GameState, playerId: string, space: num
   if (!Number.isInteger(space) || space < 2 || space > TRACK_LENGTH) return false;
   if (state.track[space].length > 0) return false;
   for (const p of state.players) {
-    if (p.id === playerId || !p.spectator) continue;
+    if (!p.spectator) continue;
+    if (p.id === playerId) {
+      // Rulebook: may move an already-placed tile to a *different* space
+      if (p.spectator.space === space) return false;
+      continue;
+    }
     if (Math.abs(p.spectator.space - space) <= 1) return false;
   }
   return true;
@@ -176,10 +184,21 @@ function moveUnit(
 ): boolean {
   const { space: from, index } = findCamel(state.track, camel);
   const unit = state.track[from].splice(index);
+  const hasRacing = unit.some(isRacing);
   const path: number[] = [];
   let pos = from;
+  let crossedCounterclockwise = false;
+
   for (let i = 0; i < steps; i++) {
-    pos = dir > 0 ? pos + 1 : wrapSpace(pos - 1);
+    if (dir > 0) {
+      pos = pos + 1;
+    } else if (hasRacing && pos - 1 < 1) {
+      // Crazy camel carrying racing camel(s) across the finish line counterclockwise
+      pos = 0;
+      crossedCounterclockwise = true;
+    } else {
+      pos = wrapSpace(pos - 1);
+    }
     path.push(pos);
   }
 
@@ -191,8 +210,17 @@ function moveUnit(
       owner.coins += 1;
       spectatorOwner = owner.id;
       const side = owner.spectator.side;
-      pos = pos + side * dir;
-      if (dir < 0) pos = wrapSpace(pos);
+      const nextPos = pos + side * dir;
+      if (dir < 0) {
+        if (hasRacing && nextPos < 1) {
+          pos = 0;
+          crossedCounterclockwise = true;
+        } else {
+          pos = wrapSpace(nextPos);
+        }
+      } else {
+        pos = nextPos;
+      }
       path.push(pos);
       under = side === -1;
     }
@@ -203,22 +231,47 @@ function moveUnit(
 
   events.push({ type: 'camelMoved', camels: unit, from, to: pos, path, under, spectatorOwner });
 
-  return dir > 0 && pos > TRACK_LENGTH && unit.some(isRacing);
+  return (dir > 0 && pos > TRACK_LENGTH && hasRacing) || (crossedCounterclockwise && hasRacing);
 }
 
 /* ------------------------------------------------------------------ */
 /* Scoring                                                             */
 /* ------------------------------------------------------------------ */
 
+function ticketReward(color: RacingColor, value: number, ranking: RacingColor[]): number {
+  if (color === ranking[0]) return value;
+  if (color === ranking[1]) return 1;
+  return -1;
+}
+
+/** Highest positive single ticket reward (betting ticket or pyramid ticket) held by `p`. */
+function bestPartnerTicketReward(p: PlayerState, ranking: RacingColor[]): number {
+  let best = p.pyramidTickets > 0 ? 1 : 0;
+  for (const bet of p.legBets) {
+    const r = ticketReward(bet.color, bet.value, ranking);
+    if (r > best) best = r;
+  }
+  return best;
+}
+
 function scoreLeg(state: GameState, events: GameEvent[]) {
   const ranking = getRanking(state.track);
   const deltas: Record<string, number> = {};
+  const partnerBonusByPlayer: Record<string, number> = {};
+
   for (const p of state.players) {
-    let d = p.pyramidTickets;
+    if (p.partnerId) {
+      const partner = state.players.find((x) => x.id === p.partnerId);
+      if (partner) {
+        partnerBonusByPlayer[p.id] = bestPartnerTicketReward(partner, ranking);
+      }
+    }
+  }
+
+  for (const p of state.players) {
+    let d = p.pyramidTickets + (partnerBonusByPlayer[p.id] ?? 0);
     for (const bet of p.legBets) {
-      if (bet.color === ranking[0]) d += bet.value;
-      else if (bet.color === ranking[1]) d += 1;
-      else d -= 1;
+      d += ticketReward(bet.color, bet.value, ranking);
     }
     const before = p.coins;
     p.coins = Math.max(0, p.coins + d);
@@ -226,12 +279,14 @@ function scoreLeg(state: GameState, events: GameEvent[]) {
     p.legBets = [];
     p.pyramidTickets = 0;
     p.spectator = null;
+    p.partnerId = null;
   }
   events.push({ type: 'legScored', leg: state.leg, ranking, deltas });
 }
 
-function startNewLeg(state: GameState) {
+function startNewLeg(state: GameState, nextStartingPlayerIndex: number) {
   state.leg += 1;
+  state.startingPlayerIndex = nextStartingPlayerIndex;
   state.legBetStacks = freshLegBetStacks();
   state.pyramid = allDice();
   state.rolledDice = [];
@@ -322,6 +377,21 @@ export function applyAction(
       break;
     }
 
+    case 'formPartnership': {
+      if (state.players.length < 6) {
+        throw new GameError('Liên minh cá cược chỉ áp dụng cho bàn từ 6–8 người chơi');
+      }
+      if (p.partnerId) throw new GameError('Bạn đã có liên minh trong chặng này');
+      if (action.partnerId === playerId) throw new GameError('Không thể tự liên minh với chính mình');
+      const partner = state.players.find((x) => x.id === action.partnerId);
+      if (!partner) throw new GameError('Không tìm thấy người chơi này');
+      if (partner.partnerId) throw new GameError('Người chơi này đã có liên minh trong chặng này');
+      p.partnerId = partner.id;
+      partner.partnerId = p.id;
+      events.push({ type: 'partnershipFormed', playerId, partnerId: partner.id });
+      break;
+    }
+
     case 'rollDie': {
       if (state.pyramid.length === 0) throw new GameError('Kim tự tháp trống');
       p.pyramidTickets += 1;
@@ -349,8 +419,9 @@ export function applyAction(
         return { state, events };
       }
       if (state.rolledDice.length >= DICE_PER_LEG) {
+        const nextStarter = (state.currentPlayerIndex + 1) % state.players.length;
         scoreLeg(state, events);
-        startNewLeg(state);
+        startNewLeg(state, nextStarter);
       }
       break;
     }

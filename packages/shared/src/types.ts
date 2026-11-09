@@ -23,6 +23,8 @@ export interface PlayerState {
   legBets: LegBet[];
   pyramidTickets: number;
   spectator: SpectatorTile | null;
+  /** Partner player ID for the current leg (6–8 player rule). */
+  partnerId?: string | null;
   /** Colours of finish cards already used. Hidden from other players until game end. */
   usedFinalCards: RacingColor[];
 }
@@ -46,9 +48,11 @@ export interface GameState {
   phase: 'playing' | 'finished';
   players: PlayerState[];
   currentPlayerIndex: number;
+  /** Player holding the Starting Player Marker for the current leg. */
+  startingPlayerIndex?: number;
   leg: number;
   turn: number;
-  /** track[space] = stack of camels, bottom first. Index 0 unused. */
+  /** track[space] = stack of camels, bottom first. Index 0 holds camels carried counterclockwise past space 1. */
   track: CamelColor[][];
   /** Remaining leg bet values per colour; next available is index 0. */
   legBetStacks: Record<RacingColor, number[]>;
@@ -73,7 +77,8 @@ export type GameAction =
   | { type: 'takeLegBet'; color: RacingColor }
   | { type: 'placeSpectator'; space: number; side: 1 | -1 }
   | { type: 'rollDie' }
-  | { type: 'finalBet'; color: RacingColor; kind: 'winner' | 'loser' };
+  | { type: 'finalBet'; color: RacingColor; kind: 'winner' | 'loser' }
+  | { type: 'formPartnership'; partnerId: string };
 
 export type GameEvent =
   | { type: 'dieRolled'; playerId: string; roll: RollResult }
@@ -89,6 +94,7 @@ export type GameEvent =
   | { type: 'legBetTaken'; playerId: string; color: RacingColor; value: number }
   | { type: 'spectatorPlaced'; playerId: string; space: number; side: 1 | -1 }
   | { type: 'finalBetPlaced'; playerId: string; kind: 'winner' | 'loser' }
+  | { type: 'partnershipFormed'; playerId: string; partnerId: string }
   | { type: 'legScored'; leg: number; ranking: RacingColor[]; deltas: Record<string, number> }
   | ({ type: 'gameOver' } & GameResult);
 

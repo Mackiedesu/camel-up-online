@@ -41,6 +41,7 @@ export interface AppState {
   log: LogEntry[];
   lastRoll: { roll: RollResult; playerId: string; key: number } | null;
   toasts: Toast[];
+  showRules: boolean;
 }
 
 let state: AppState = {
@@ -52,6 +53,7 @@ let state: AppState = {
   log: [],
   lastRoll: null,
   toasts: [],
+  showRules: false,
 };
 
 const listeners = new Set<() => void>();
@@ -100,20 +102,23 @@ function formatEvent(e: GameEvent): string {
     case 'camelMoved': {
       const who = e.camels.map(cn).join(', ');
       const spec = e.spectatorOwner
-        ? ` (gặp thẻ khán giả của ${nameOf(e.spectatorOwner)}${e.under ? ', chui xuống dưới' : ''})`
+        ? ` (gặp thẻ khán giả của ${nameOf(e.spectatorOwner)} [+1 💰]${e.under ? ', chui xuống đáy chồng' : ', nhảy lên đỉnh chồng'})`
         : '';
-      return `🐪 ${who}: ô ${e.from} → ${e.to > 16 ? 'ĐÍCH' : `ô ${e.to}`}${spec}`;
+      const dest = e.to > 16 ? 'VẠCH ĐÍCH 🏆' : e.to === 0 ? 'VẠCH ĐÍCH (ngược chiều) 🌀' : `ô ${e.to}`;
+      return `🐪 ${who}: ô ${e.from} → ${dest}${spec}`;
     }
     case 'legBetTaken':
-      return `🎟️ ${nameOf(e.playerId)} cược chặng ${cn(e.color)} (${e.value})`;
+      return `🎟️ ${nameOf(e.playerId)} lấy vé cược chặng ${cn(e.color)} (hạng 1: +${e.value} 💰)`;
     case 'spectatorPlaced':
-      return `🌴 ${nameOf(e.playerId)} đặt ${e.side > 0 ? 'ốc đảo +1' : 'ảo ảnh −1'} ở ô ${e.space}`;
+      return `📣 ${nameOf(e.playerId)} đặt thẻ khán giả ${e.side > 0 ? 'Cổ vũ (+1)' : 'La ó (−1)'} ở ô ${e.space}`;
     case 'finalBetPlaced':
-      return `🃏 ${nameOf(e.playerId)} cược ${e.kind === 'winner' ? 'THẮNG' : 'THUA'} chung cuộc`;
+      return `🃏 ${nameOf(e.playerId)} đặt thẻ cược ${e.kind === 'winner' ? 'VỀ NHẤT 🏆' : 'VỀ BÉT 🐢'} chung cuộc`;
+    case 'partnershipFormed':
+      return `🤝 ${nameOf(e.playerId)} lập Liên minh cá cược với ${nameOf(e.partnerId)}`;
     case 'legScored':
-      return `🏁 Hết chặng ${e.leg}. Nhất: ${cn(e.ranking[0])}, nhì: ${cn(e.ranking[1])}`;
+      return `🏁 Hết chặng ${e.leg}. Nhất: ${cn(e.ranking[0])}, Nhì: ${cn(e.ranking[1])}`;
     case 'gameOver':
-      return `🏆 Kết thúc! ${cn(e.winnerCamel)} về nhất, ${cn(e.loserCamel)} về bét`;
+      return `🏆 Kết thúc cuộc đua! ${cn(e.winnerCamel)} về nhất, ${cn(e.loserCamel)} về bét`;
   }
 }
 
@@ -164,7 +169,7 @@ socket.on('game:events', (events: GameEvent[]) => {
         setTimeout(() => sfx.play(e.under ? 'mirage' : 'oasis'), 380);
       }
     }
-    if (e.type === 'legBetTaken' || e.type === 'finalBetPlaced') {
+    if (e.type === 'legBetTaken' || e.type === 'finalBetPlaced' || e.type === 'partnershipFormed') {
       sfx.play('bet');
     }
     if (e.type === 'spectatorPlaced') {
@@ -209,6 +214,11 @@ function rememberRoom(code: string) {
 export function setName(name: string) {
   localStorage.setItem('camelup.name', name);
   set({ name });
+}
+
+export function setShowRules(showRules: boolean) {
+  sfx.play('click');
+  set({ showRules });
 }
 
 export async function createRoom() {

@@ -20,7 +20,7 @@ import {
 
 /** 16 spaces around the edge of a 5x5 grid, clockwise from top-left. */
 export function cellOf(space: number): { row: number; col: number } {
-  const s = space > TRACK_LENGTH ? 1 : space; // finished camels shown on/near space 1
+  const s = space > TRACK_LENGTH ? 1 : space < 1 ? 16 : space; // finished camels shown on/near finish line
   if (s <= 5) return { row: 0, col: s - 1 };
   if (s <= 9) return { row: s - 5, col: 4 };
   if (s <= 13) return { row: 4, col: 4 - (s - 9) };
@@ -50,9 +50,9 @@ export function Board({ game, selectable, onSelect }: Props) {
     y: number;
   }[] = [];
   game.track.forEach((stack, space) => {
-    if (space === 0 || stack.length === 0) return;
+    if (stack.length === 0) return;
     const { row, col } = cellOf(space);
-    const finished = space > TRACK_LENGTH;
+    const finished = space > TRACK_LENGTH || space === 0;
     // Tall step so each camel clearly sits on the back of the camel below it
     const step = stack.length > 1 ? Math.min(4.6, 13.8 / (stack.length - 1)) : 0;
     stack.forEach((color, k) => {
@@ -98,8 +98,15 @@ export function Board({ game, selectable, onSelect }: Props) {
               </div>
             )}
             {owner?.spectator && (
-              <div className={`spectator ${owner.spectator.side > 0 ? 'plus' : 'minus'}`}>
-                <span>{owner.spectator.side > 0 ? '🌴 +1' : '🏜️ −1'}</span>
+              <div
+                className={`spectator ${owner.spectator.side > 0 ? 'plus' : 'minus'}`}
+                title={
+                  owner.spectator.side > 0
+                    ? `Thẻ Cổ vũ (+1) của ${owner.name}: đi tiếp 1 ô & nhảy lên ĐỈNH chồng`
+                    : `Thẻ La ó (−1) của ${owner.name}: lùi 1 ô & chui xuống ĐÁY chồng`
+                }
+              >
+                <span>{owner.spectator.side > 0 ? '👏 +1' : '👎 −1'}</span>
                 <small>{owner.name}</small>
               </div>
             )}
@@ -132,18 +139,30 @@ export function Board({ game, selectable, onSelect }: Props) {
               <PyramidSvg className="pyramid-svg" />
             </motion.div>
             <div className="pyramid-count">
-              Đã lăn {game.rolledDice.length}/{DICE_PER_LEG}
+              🎫 Vé Kim tự tháp còn: <strong>{DICE_PER_LEG - game.rolledDice.length}</strong>/{DICE_PER_LEG}
             </div>
           </div>
-          <div className="rolled-dice">
-            {game.rolledDice.map((r, i) => {
+          <div className="dice-tents" title="5 Lều xúc xắc (khi đủ 5 xúc xắc sẽ kết thúc chặng)">
+            {Array.from({ length: DICE_PER_LEG }, (_, i) => {
+              const r = game.rolledDice[i];
+              if (!r) {
+                return (
+                  <span key={i} className="tent-slot empty">
+                    ⛺
+                  </span>
+                );
+              }
               const c = r.die === 'grey' ? r.crazyColor! : r.die;
               return (
                 <span
                   key={i}
                   className={`die small ${r.die === 'grey' ? 'grey' : ''}`}
                   style={{ background: CAMEL_HEX[c], color: c === 'white' || c === 'yellow' ? '#222' : '#fff' }}
-                  title={r.die === 'grey' ? `Xám (${c})` : c}
+                  title={
+                    r.die === 'grey'
+                      ? `Xúc xắc Xám (mặt ${r.crazyColor} ${r.value}, lạc đà ${r.movedCamel} đi)`
+                      : `Xúc xắc ${r.die}: +${r.value}`
+                  }
                 >
                   {r.value}
                 </span>

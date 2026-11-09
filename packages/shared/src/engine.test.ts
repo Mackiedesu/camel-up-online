@@ -123,15 +123,16 @@ describe('chooseCrazyCamel', () => {
 });
 
 describe('spectator placement', () => {
-  it('validates spaces', () => {
+  it('validates spaces and allows moving own tile to a different space', () => {
     const s = makeState({ 1: ['red'], 5: ['blue'] });
     s.players[1].spectator = { space: 8, side: 1 };
     expect(canPlaceSpectator(s, 'a', 1)).toBe(false); // space 1
     expect(canPlaceSpectator(s, 'a', 5)).toBe(false); // has camel
     expect(canPlaceSpectator(s, 'a', 7)).toBe(false); // adjacent
-    expect(canPlaceSpectator(s, 'a', 8)).toBe(false); // occupied
+    expect(canPlaceSpectator(s, 'a', 8)).toBe(false); // occupied by b
     expect(canPlaceSpectator(s, 'a', 10)).toBe(true);
-    expect(canPlaceSpectator(s, 'b', 9)).toBe(true); // own tile may move
+    expect(canPlaceSpectator(s, 'b', 8)).toBe(false); // own tile must move to a DIFFERENT space
+    expect(canPlaceSpectator(s, 'b', 9)).toBe(true); // own tile may move to adjacent empty space
   });
 });
 
@@ -152,8 +153,44 @@ describe('leg scoring', () => {
     expect(state.players[1].coins).toBe(3 + 1);
     expect(state.players[2].coins).toBe(3 + 1);
     expect(state.leg).toBe(2);
+    expect(state.startingPlayerIndex).toBe(0); // player to the left of 'c' (index 2 -> 0)
+    expect(state.currentPlayerIndex).toBe(0);
     expect(state.pyramid).toHaveLength(6);
     expect(state.players.every((p) => p.legBets.length === 0 && p.spectator === null)).toBe(true);
+  });
+
+  it('scores betting partnerships in 6+ player games by copying best positive partner ticket', () => {
+    const sixPlayers = Array.from({ length: 6 }, (_, i) => ({ id: `p${i}`, name: `P${i}` }));
+    let s = createGame(sixPlayers, seq());
+    s.track = Array.from({ length: TRACK_ARRAY_SIZE }, () => []);
+    s.track[5] = ['purple'];
+    s.track[4] = ['yellow'];
+    s.track[3] = ['green'];
+    s.track[2] = ['blue'];
+    s.track[1] = ['red'];
+    s.track[14] = ['black'];
+    s.track[15] = ['white'];
+    s.currentPlayerIndex = 0;
+
+    // p0 forms partnership with p3
+    s = applyAction(s, 'p0', { type: 'formPartnership', partnerId: 'p3' }).state;
+    expect(s.players[0].partnerId).toBe('p3');
+    expect(s.players[3].partnerId).toBe('p0');
+
+    // p0 has a 1st-place ticket (+5), p3 only has a losing ticket (-1) and 1 pyramid ticket (+1)
+    s.players[0].legBets = [{ color: 'purple', value: 5 }];
+    s.players[3].legBets = [{ color: 'red', value: 5 }];
+    s.rolledDice = [1, 2, 3, 4].map(() => ({ die: 'grey' as const, value: 1, movedCamel: 'black' as const }));
+    s.pyramid = ['purple', 'grey'];
+    s.currentPlayerIndex = 3; // p3 rolls 5th die (+1 pyramid ticket)
+
+    const { state } = applyAction(s, 'p3', { type: 'rollDie' }, seq(0, v(1)));
+    // p0 gets: +5 (own purple bet) + 1 (copied p3's pyramid ticket) = +6 => 9 coins
+    expect(state.players[0].coins).toBe(3 + 5 + 1);
+    // p3 gets: -1 (own red bet) + 1 (own pyramid ticket) + 5 (copied p0's purple bet) = +5 => 8 coins
+    expect(state.players[3].coins).toBe(3 - 1 + 1 + 5);
+    // partnerships reset for next leg
+    expect(state.players.every((p) => p.partnerId === null)).toBe(true);
   });
 
   it('coins never go below zero', () => {
@@ -207,6 +244,19 @@ describe('game end', () => {
     expect(state.players[0].coins).toBe(3 + 1 + 5);
     expect(state.players[2].coins).toBe(3 - 1 + 8);
     expect(events.at(-1)?.type).toBe('gameOver');
+  });
+
+  it('ends when a crazy camel carries a racing camel counterclockwise across the finish line (counts as least advanced)', () => {
+    const s = makeState(
+      { 1: ['black', 'yellow'], 2: ['purple'], 5: ['green'], 10: ['blue'], 12: ['red'], 15: ['white'] },
+      ['grey'],
+    );
+    s.finalLoserBets = [{ playerId: 'a', color: 'yellow' }];
+    const { state } = applyAction(s, 'a', { type: 'rollDie' }, seq(0, v(2), 0.1));
+    expect(state.phase).toBe('finished');
+    expect(state.result?.winnerCamel).toBe('red');
+    expect(state.result?.loserCamel).toBe('yellow');
+    expect(state.players[0].coins).toBe(3 + 1 + 8);
   });
 });
 
