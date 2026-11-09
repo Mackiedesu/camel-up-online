@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { canPlaceSpectator, TRACK_LENGTH } from '@camelup/shared';
-import { leaveRoom, sendAction, setShowRules, useStore } from '../store';
+import { leaveRoom, sendAction, useStore } from '../store';
 import { Board } from './Board';
 import { ActionPanel } from './ActionPanel';
 import { PlayersPanel } from './PlayersPanel';
 import { GameOver } from './GameOver';
-import { SoundToggle } from './SoundToggle';
+import { SettingsButton } from './SettingsMenu';
 
 export function GameView() {
   const game = useStore((s) => s.game)!;
@@ -41,10 +41,7 @@ export function GameView() {
           Phòng <strong>{room.code}</strong> · Chặng {game.leg} · Lượt {game.turn}
         </span>
         <div className="row">
-          <button className="btn small" onClick={() => setShowRules(true)}>
-            📖 Luật chơi
-          </button>
-          <SoundToggle />
+          <SettingsButton />
           <button className="btn small ghost" onClick={() => confirm('Rời ván đang chơi?') && leaveRoom()}>
             Rời
           </button>

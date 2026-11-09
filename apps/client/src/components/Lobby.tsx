@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { MAX_PLAYERS, MIN_PLAYERS } from '@camelup/shared';
-import { leaveRoom, pushToast, setShowRules, startGame, useStore } from '../store';
+import { leaveRoom, pushToast, startGame, useStore } from '../store';
+import { SettingsButton } from './SettingsMenu';
 
 export function Lobby() {
   const room = useStore((s) => s.room)!;
@@ -28,9 +29,7 @@ export function Lobby() {
           <button className="btn small" onClick={copy}>
             📋 Copy link mời
           </button>
-          <button className="btn small" onClick={() => setShowRules(true)}>
-            📖 Luật chơi
-          </button>
+          <SettingsButton />
         </div>
 
         <h3>

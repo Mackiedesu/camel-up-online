@@ -42,6 +42,8 @@ export interface AppState {
   lastRoll: { roll: RollResult; playerId: string; key: number } | null;
   toasts: Toast[];
   showRules: boolean;
+  showSettings: boolean;
+  turnTimerPref: boolean;
 }
 
 let state: AppState = {
@@ -54,6 +56,8 @@ let state: AppState = {
   lastRoll: null,
   toasts: [],
   showRules: false,
+  showSettings: false,
+  turnTimerPref: localStorage.getItem('camelup.turnTimer') !== '0',
 };
 
 const listeners = new Set<() => void>();
@@ -115,6 +119,8 @@ function formatEvent(e: GameEvent): string {
       return `🃏 ${nameOf(e.playerId)} đặt thẻ cược ${e.kind === 'winner' ? 'VỀ NHẤT 🏆' : 'VỀ BÉT 🐢'} chung cuộc`;
     case 'partnershipFormed':
       return `🤝 ${nameOf(e.playerId)} lập Liên minh cá cược với ${nameOf(e.partnerId)}`;
+    case 'turnTimedOut':
+      return `⏱️ Hết 30s! Tự động lắc xúc xắc cho ${nameOf(e.playerId)}`;
     case 'legScored':
       return `🏁 Hết chặng ${e.leg}. Nhất: ${cn(e.ranking[0])}, Nhì: ${cn(e.ranking[1])}`;
     case 'gameOver':
@@ -178,6 +184,9 @@ socket.on('game:events', (events: GameEvent[]) => {
     if (e.type === 'spectatorPlaced') {
       sfx.play('spectator');
     }
+    if (e.type === 'turnTimedOut') {
+      pushToast({ kind: 'info', text: `⏱️ ${nameOf(e.playerId)} hết 30s — tự động lắc xúc xắc!` }, 3200);
+    }
     if (e.type === 'legScored') {
       const clearKey = patch.lastRoll?.key ?? state.lastRoll?.key;
       setTimeout(() => {
@@ -232,8 +241,28 @@ export function setShowRules(showRules: boolean) {
   set({ showRules });
 }
 
+export function setShowSettings(showSettings: boolean) {
+  sfx.play('click');
+  set({ showSettings });
+}
+
+export async function toggleTurnTimer() {
+  sfx.play('click');
+  const current = state.room ? state.room.turnTimerEnabled : state.turnTimerPref;
+  const next = !current;
+  localStorage.setItem('camelup.turnTimer', next ? '1' : '0');
+  set({ turnTimerPref: next });
+  if (state.room) {
+    await emit('room:setTimer', { enabled: next });
+  }
+}
+
 export async function createRoom() {
-  const res = await emit('room:create', { playerId: state.playerId, name: state.name });
+  const res = await emit('room:create', {
+    playerId: state.playerId,
+    name: state.name,
+    turnTimerEnabled: state.turnTimerPref,
+  });
   if (res.ok && res.code) rememberRoom(res.code);
 }
 

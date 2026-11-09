@@ -17,6 +17,8 @@ export const MIN_PLAYERS = 2;
 export const MAX_PLAYERS = 8;
 /** Dice rolled per leg (6 dice in pyramid, the last one stays inside). */
 export const DICE_PER_LEG = 5;
+/** Default turn duration in seconds when the turn timer is enabled. */
+export const TURN_TIME_SECONDS = 30;
 
 /**
  * Rule switches for details that may differ between rulebook printings / house rules.

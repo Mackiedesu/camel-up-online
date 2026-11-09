@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { createRoom, joinRoom, setName, setShowRules, useStore } from '../store';
+import { createRoom, joinRoom, setName, useStore } from '../store';
 import { CamelIcon } from './CamelIcon';
+import { SettingsButton } from './SettingsMenu';
 import { RACING_CAMELS } from '@camelup/shared';
 
 export function Home() {
@@ -63,9 +64,7 @@ export function Home() {
           </button>
         </div>
 
-        <button className="btn wide rules-btn" onClick={() => setShowRules(true)}>
-          📖 Hướng dẫn luật chơi (How to Play)
-        </button>
+        <SettingsButton className="btn wide rules-btn" />
       </div>
     </div>
   );

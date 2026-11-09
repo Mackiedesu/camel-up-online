@@ -1,6 +1,9 @@
-import { CAMEL_HEX, finalBetCount, type GameState, type RoomView } from '@camelup/shared';
+import { CAMEL_HEX, CAMEL_NAME_VI, finalBetCount, type GameState, type RoomView } from '@camelup/shared';
+import { useTurnCountdown } from './SettingsMenu';
 
 export function PlayersPanel({ game, room, me }: { game: GameState; room: RoomView; me: string }) {
+  const { secondsLeft } = useTurnCountdown();
+
   return (
     <div className="panel players">
       {game.players.map((p, i) => {
@@ -8,6 +11,10 @@ export function PlayersPanel({ game, room, me }: { game: GameState; room: RoomVi
         const isTurn = i === game.currentPlayerIndex && game.phase === 'playing';
         const isStarter = i === (game.startingPlayerIndex ?? 0);
         const partner = p.partnerId ? game.players.find((x) => x.id === p.partnerId) : null;
+        const ownWinBets =
+          p.id === me ? game.finalWinnerBets.filter((b) => b.playerId === me && b.color !== null) : [];
+        const ownLoseBets =
+          p.id === me ? game.finalLoserBets.filter((b) => b.playerId === me && b.color !== null) : [];
         return (
           <div key={p.id} className={`player-row ${isTurn ? 'turn' : ''} ${p.id === me ? 'me' : ''}`}>
             <span className={`dot ${online ? 'on' : 'off'}`} title={online ? 'online' : 'offline'} />
@@ -18,6 +25,11 @@ export function PlayersPanel({ game, room, me }: { game: GameState; room: RoomVi
               {isStarter && (
                 <span className="starter-badge" title="Người giữ biểu tượng Đi đầu chặng này">
                   🚩
+                </span>
+              )}
+              {isTurn && secondsLeft !== null && (
+                <span className={`mini-timer ${secondsLeft <= 10 ? 'urgent' : ''}`}>
+                  ⏱️{secondsLeft}s
                 </span>
               )}
             </span>
@@ -50,10 +62,41 @@ export function PlayersPanel({ game, room, me }: { game: GameState; room: RoomVi
                   🤝 {partner.name}
                 </span>
               )}
-              {finalBetCount(game, p.id) > 0 && (
-                <span className="chip" title="Số thẻ Cược chung cuộc đã đặt">
-                  🃏×{finalBetCount(game, p.id)}
-                </span>
+              {p.id === me ? (
+                <>
+                  {ownWinBets.map((b) => (
+                    <span
+                      key={`w-${b.color}`}
+                      className="final-bet-badge mini"
+                      style={{
+                        background: CAMEL_HEX[b.color!],
+                        color: b.color === 'yellow' ? '#222' : '#fff',
+                      }}
+                      title={`Bạn đã cược ${CAMEL_NAME_VI[b.color!]} Về Nhất chung cuộc`}
+                    >
+                      🏆 {CAMEL_NAME_VI[b.color!]}
+                    </span>
+                  ))}
+                  {ownLoseBets.map((b) => (
+                    <span
+                      key={`l-${b.color}`}
+                      className="final-bet-badge mini"
+                      style={{
+                        background: CAMEL_HEX[b.color!],
+                        color: b.color === 'yellow' ? '#222' : '#fff',
+                      }}
+                      title={`Bạn đã cược ${CAMEL_NAME_VI[b.color!]} Về Bét chung cuộc`}
+                    >
+                      🐢 {CAMEL_NAME_VI[b.color!]}
+                    </span>
+                  ))}
+                </>
+              ) : (
+                finalBetCount(game, p.id) > 0 && (
+                  <span className="chip" title="Số thẻ Cược chung cuộc đã đặt">
+                    🃏×{finalBetCount(game, p.id)}
+                  </span>
+                )
               )}
             </div>
           </div>

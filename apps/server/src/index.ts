@@ -36,7 +36,10 @@ const httpServer = createServer((req, res) => {
 });
 
 const io = new Server(httpServer, { cors: { origin: '*' } });
-const rooms = new RoomManager();
+const rooms = new RoomManager((room, events) => {
+  io.to(room.code).emit('game:events', events);
+  broadcastRoom(room);
+});
 
 interface SocketData {
   playerId?: string;
@@ -81,19 +84,21 @@ io.on('connection', (socket: Socket) => {
     if (room) broadcastRoom(room);
   };
 
-  socket.on('room:create', (msg: { playerId: string; name: string }, ack?: Ack<{ code: string }>) =>
-    handle(ack, () => {
-      const name = cleanName(msg?.name);
-      if (!name) throw new RoomError('Vui lòng nhập tên');
-      if (!validId(msg?.playerId)) throw new RoomError('playerId không hợp lệ');
-      leaveCurrent(true);
-      const room = rooms.create(msg.playerId, name, socket.id);
-      data.playerId = msg.playerId;
-      data.roomCode = room.code;
-      socket.join(room.code);
-      broadcastRoom(room);
-      return { code: room.code };
-    }),
+  socket.on(
+    'room:create',
+    (msg: { playerId: string; name: string; turnTimerEnabled?: boolean }, ack?: Ack<{ code: string }>) =>
+      handle(ack, () => {
+        const name = cleanName(msg?.name);
+        if (!name) throw new RoomError('Vui lòng nhập tên');
+        if (!validId(msg?.playerId)) throw new RoomError('playerId không hợp lệ');
+        leaveCurrent(true);
+        const room = rooms.create(msg.playerId, name, socket.id, msg.turnTimerEnabled ?? true);
+        data.playerId = msg.playerId;
+        data.roomCode = room.code;
+        socket.join(room.code);
+        broadcastRoom(room);
+        return { code: room.code };
+      }),
   );
 
   socket.on(
@@ -128,6 +133,14 @@ io.on('connection', (socket: Socket) => {
     handle(ack, () => {
       if (!data.roomCode || !data.playerId) throw new RoomError('Bạn chưa vào phòng');
       const room = rooms.backToLobby(data.roomCode, data.playerId);
+      broadcastRoom(room);
+    }),
+  );
+
+  socket.on('room:setTimer', (msg: { enabled: boolean }, ack?: Ack) =>
+    handle(ack, () => {
+      if (!data.roomCode || !data.playerId) throw new RoomError('Bạn chưa vào phòng');
+      const room = rooms.setTurnTimer(data.roomCode, Boolean(msg?.enabled));
       broadcastRoom(room);
     }),
   );

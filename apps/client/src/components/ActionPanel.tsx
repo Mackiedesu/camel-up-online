@@ -10,6 +10,7 @@ import { sendAction } from '../store';
 import { sfx } from '../sound';
 import { CamelIcon } from './CamelIcon';
 import { BettingTentSvg, PyramidSvg } from './DesertProps';
+import { useTurnCountdown } from './SettingsMenu';
 
 interface Props {
   game: GameState;
@@ -24,6 +25,7 @@ export function ActionPanel({ game, me, spectatorSide, setSpectatorSide }: Props
   const meP = game.players.find((p) => p.id === me);
   const [finalColor, setFinalColor] = useState<RacingColor | null>(null);
   const [busy, setBusy] = useState(false);
+  const { secondsLeft, progress } = useTurnCountdown();
 
   const act = async (fn: () => Promise<unknown>) => {
     setBusy(true);
@@ -32,10 +34,35 @@ export function ActionPanel({ game, me, spectatorSide, setSpectatorSide }: Props
   };
   const disabled = !myTurn || busy;
 
+  const myWinnerBets = game.finalWinnerBets
+    .map((b, idx) => ({ ...b, order: idx + 1 }))
+    .filter((b) => b.playerId === me && b.color !== null);
+  const myLoserBets = game.finalLoserBets
+    .map((b, idx) => ({ ...b, order: idx + 1 }))
+    .filter((b) => b.playerId === me && b.color !== null);
+
   return (
     <div className={`panel actions ${myTurn ? 'my-turn' : ''}`}>
-      <div className="turn-banner">
-        {myTurn ? '⭐ Tới lượt bạn! Chọn 1 hành động' : `Đang chờ ${current.name}…`}
+      <div className="turn-banner-wrap">
+        <div className="turn-banner">
+          <span>{myTurn ? '⭐ Tới lượt bạn! Chọn 1 hành động' : `Đang chờ ${current.name}…`}</span>
+          {secondsLeft !== null && (
+            <span
+              className={`turn-timer-pill ${secondsLeft <= 10 ? 'urgent' : ''}`}
+              title="Hết 30 giây sẽ tự động Lắc xúc xắc"
+            >
+              ⏱️ {secondsLeft}s
+            </span>
+          )}
+        </div>
+        {secondsLeft !== null && (
+          <div className="turn-timer-bar">
+            <div
+              className={`turn-timer-fill ${secondsLeft <= 10 ? 'urgent' : ''}`}
+              style={{ width: `${progress * 100}%` }}
+            />
+          </div>
+        )}
       </div>
 
       <section>
@@ -125,16 +152,26 @@ export function ActionPanel({ game, me, spectatorSide, setSpectatorSide }: Props
         <div className="final-colors">
           {RACING_CAMELS.map((c) => {
             const used = meP?.usedFinalCards.includes(c);
+            const winBet = myWinnerBets.find((b) => b.color === c);
+            const loseBet = myLoserBets.find((b) => b.color === c);
+            const badge = winBet ? '🏆' : loseBet ? '🐢' : used ? '✓' : '';
+            const tip = winBet
+              ? `Đã cược ${CAMEL_NAME_VI[c]} VỀ NHẤT (thẻ #${winBet.order} trong chồng)`
+              : loseBet
+                ? `Đã cược ${CAMEL_NAME_VI[c]} VỀ BÉT (thẻ #${loseBet.order} trong chồng)`
+                : used
+                  ? 'Đã dùng thẻ màu này'
+                  : `Chọn thẻ ${CAMEL_NAME_VI[c]}`;
             return (
               <button
                 key={c}
-                className={`final-chip ${finalColor === c ? 'selected' : ''}`}
-                style={{ background: CAMEL_HEX[c] }}
+                className={`final-chip ${finalColor === c ? 'selected' : ''} ${used ? 'used-chip' : ''}`}
+                style={{ background: CAMEL_HEX[c], color: c === 'yellow' ? '#222' : '#fff' }}
                 disabled={disabled || used}
-                title={used ? 'Đã dùng thẻ màu này' : `Chọn thẻ ${CAMEL_NAME_VI[c]}`}
+                title={tip}
                 onClick={() => setFinalColor(c)}
               >
-                {used ? '✓' : ''}
+                {badge}
               </button>
             );
           })}
@@ -164,6 +201,49 @@ export function ActionPanel({ game, me, spectatorSide, setSpectatorSide }: Props
           >
             🐢 Cược Về bét ({game.finalLoserBets.length})
           </button>
+        </div>
+
+        <div className="my-final-bets">
+          <div className="my-final-row">
+            <span className="my-final-label">🏆 Bạn cược Nhất:</span>
+            {myWinnerBets.length === 0 ? (
+              <span className="muted small">Chưa đặt</span>
+            ) : (
+              myWinnerBets.map((b) => (
+                <span
+                  key={b.color!}
+                  className="final-bet-badge"
+                  style={{
+                    background: CAMEL_HEX[b.color!],
+                    color: b.color === 'yellow' ? '#222' : '#fff',
+                  }}
+                  title={`Thẻ đặt thứ #${b.order} trong chồng Về Nhất`}
+                >
+                  🏆 {CAMEL_NAME_VI[b.color!]} <small>#{b.order}</small>
+                </span>
+              ))
+            )}
+          </div>
+          <div className="my-final-row">
+            <span className="my-final-label">🐢 Bạn cược Bét:</span>
+            {myLoserBets.length === 0 ? (
+              <span className="muted small">Chưa đặt</span>
+            ) : (
+              myLoserBets.map((b) => (
+                <span
+                  key={b.color!}
+                  className="final-bet-badge"
+                  style={{
+                    background: CAMEL_HEX[b.color!],
+                    color: b.color === 'yellow' ? '#222' : '#fff',
+                  }}
+                  title={`Thẻ đặt thứ #${b.order} trong chồng Về Bét`}
+                >
+                  🐢 {CAMEL_NAME_VI[b.color!]} <small>#{b.order}</small>
+                </span>
+              ))
+            )}
+          </div>
         </div>
       </section>
 

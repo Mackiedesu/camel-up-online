@@ -95,6 +95,7 @@ export type GameEvent =
   | { type: 'spectatorPlaced'; playerId: string; space: number; side: 1 | -1 }
   | { type: 'finalBetPlaced'; playerId: string; kind: 'winner' | 'loser' }
   | { type: 'partnershipFormed'; playerId: string; partnerId: string }
+  | { type: 'turnTimedOut'; playerId: string }
   | { type: 'legScored'; leg: number; ranking: RacingColor[]; deltas: Record<string, number> }
   | ({ type: 'gameOver' } & GameResult);
 
@@ -111,6 +112,9 @@ export interface RoomView {
   hostId: string;
   players: RoomPlayerView[];
   status: 'lobby' | 'playing' | 'finished';
+  turnTimerEnabled: boolean;
+  /** Epoch ms when the current turn expires (if playing and timer enabled). */
+  turnDeadline: number | null;
 }
 
 export interface RoomStatePayload {

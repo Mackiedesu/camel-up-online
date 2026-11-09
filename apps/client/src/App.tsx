@@ -4,6 +4,7 @@ import { Lobby } from './components/Lobby';
 import { GameView } from './components/GameView';
 import { Toasts } from './components/Toasts';
 import { HowToPlayModal } from './components/HowToPlayModal';
+import { SettingsModal } from './components/SettingsMenu';
 
 export function App() {
   const room = useStore((s) => s.room);
@@ -14,6 +15,7 @@ export function App() {
     <>
       {!connected && <div className="conn-banner">Đang kết nối tới máy chủ…</div>}
       {!room ? <Home /> : room.status === 'lobby' || !game ? <Lobby /> : <GameView />}
+      <SettingsModal />
       <HowToPlayModal />
       <Toasts />
     </>
