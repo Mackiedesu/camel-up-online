@@ -1,5 +1,7 @@
 # 🐪 Camel Up Online (2nd Edition)
 
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/Mackiedesu/camel-up-online)
+
 Bản clone online của boardgame **Camel Up (2nd Edition)**, hỗ trợ **2–8 người chơi** realtime.
 
 ## Tính năng
