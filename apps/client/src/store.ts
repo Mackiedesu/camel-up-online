@@ -157,6 +157,9 @@ socket.on('room:state', (p: RoomStatePayload) => {
 socket.on('game:events', (events: GameEvent[]) => {
   const entries = events.map((e) => ({ id: seq++, text: formatEvent(e) }));
   const patch: Partial<AppState> = { log: [...entries.reverse(), ...state.log].slice(0, 60) };
+  if (!events.some((e) => e.type === 'dieRolled') && state.game?.rolledDice.length === 0) {
+    patch.lastRoll = null;
+  }
   const gameOver = events.some((e) => e.type === 'gameOver');
   for (const e of events) {
     if (e.type === 'dieRolled') {
@@ -175,12 +178,20 @@ socket.on('game:events', (events: GameEvent[]) => {
     if (e.type === 'spectatorPlaced') {
       sfx.play('spectator');
     }
-    if (e.type === 'legScored' && !gameOver) {
-      const lines = Object.entries(e.deltas).map(([id, d]) => `${nameOf(id)}: ${signed(d)} 💰`);
+    if (e.type === 'legScored') {
+      const clearKey = patch.lastRoll?.key ?? state.lastRoll?.key;
       setTimeout(() => {
-        sfx.play('legEnd');
-        pushToast({ kind: 'leg', text: `Kết thúc chặng ${e.leg}`, lines }, 6000);
+        if (state.lastRoll?.key === clearKey) {
+          set({ lastRoll: null });
+        }
       }, 900);
+      if (!gameOver) {
+        const lines = Object.entries(e.deltas).map(([id, d]) => `${nameOf(id)}: ${signed(d)} 💰`);
+        setTimeout(() => {
+          sfx.play('legEnd');
+          pushToast({ kind: 'leg', text: `Kết thúc chặng ${e.leg}`, lines }, 6000);
+        }, 900);
+      }
     }
     if (e.type === 'gameOver') {
       setTimeout(() => sfx.play('fanfare'), 650);
