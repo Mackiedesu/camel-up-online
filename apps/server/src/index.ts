@@ -21,6 +21,9 @@ const MIME: Record<string, string> = {
 };
 
 const httpServer = createServer((req, res) => {
+  if (req.url?.startsWith('/.proxy/')) {
+    req.url = req.url.slice('/.proxy'.length);
+  }
   if (!existsSync(CLIENT_DIST)) {
     res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' });
     res.end('Camel Up server đang chạy. Mở client dev tại http://localhost:5173');
@@ -35,7 +38,15 @@ const httpServer = createServer((req, res) => {
   res.end(readFileSync(file));
 });
 
-const io = new Server(httpServer, { cors: { origin: '*' } });
+const io = new Server(httpServer, {
+  cors: { origin: '*' },
+  allowRequest: (req, callback) => {
+    if (req.url?.startsWith('/.proxy/')) {
+      req.url = req.url.slice('/.proxy'.length);
+    }
+    callback(null, true);
+  },
+});
 const rooms = new RoomManager((room, events) => {
   io.to(room.code).emit('game:events', events);
   broadcastRoom(room);
@@ -111,6 +122,34 @@ io.on('connection', (socket: Socket) => {
         const code = String(msg?.code ?? '').trim().toUpperCase();
         if (data.roomCode && data.roomCode !== code) leaveCurrent(true);
         const room = rooms.join(code, msg.playerId, name, socket.id);
+        data.playerId = msg.playerId;
+        data.roomCode = room.code;
+        socket.join(room.code);
+        broadcastRoom(room);
+        return { code: room.code };
+      }),
+  );
+
+  socket.on(
+    'room:joinOrCreate',
+    (
+      msg: { code: string; playerId: string; name: string; turnTimerEnabled?: boolean },
+      ack?: Ack<{ code: string }>,
+    ) =>
+      handle(ack, () => {
+        const name = cleanName(msg?.name);
+        if (!name) throw new RoomError('Vui lòng nhập tên');
+        if (!validId(msg?.playerId)) throw new RoomError('playerId không hợp lệ');
+        const code = String(msg?.code ?? '').trim().toUpperCase();
+        if (code.length < 4 || code.length > 8) throw new RoomError('Mã phòng không hợp lệ');
+        if (data.roomCode && data.roomCode !== code) leaveCurrent(true);
+        const room = rooms.joinOrCreate(
+          code,
+          msg.playerId,
+          name,
+          socket.id,
+          msg.turnTimerEnabled ?? true,
+        );
         data.playerId = msg.playerId;
         data.roomCode = room.code;
         socket.join(room.code);

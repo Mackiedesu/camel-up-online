@@ -10,13 +10,23 @@ import {
   type RoomView,
 } from '@camelup/shared';
 import { sfx } from './sound';
+import {
+  initDiscordActivity,
+  safeLocalGet,
+  safeLocalSet,
+  safeSessionGet,
+  safeSessionRemove,
+  safeSessionSet,
+} from './discord';
+
+export const discord = initDiscordActivity();
 
 /* ---------- Identity (per tab, survives refresh) ---------- */
 function getPlayerId(): string {
-  let id = sessionStorage.getItem('camelup.playerId');
+  let id = safeSessionGet('camelup.playerId');
   if (!id) {
     id = crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    sessionStorage.setItem('camelup.playerId', id);
+    safeSessionSet('camelup.playerId', id);
   }
   return id;
 }
@@ -49,7 +59,7 @@ export interface AppState {
 let state: AppState = {
   connected: false,
   playerId: getPlayerId(),
-  name: localStorage.getItem('camelup.name') ?? '',
+  name: safeLocalGet('camelup.name') ?? '',
   room: null,
   game: null,
   log: [],
@@ -57,7 +67,7 @@ let state: AppState = {
   toasts: [],
   showRules: false,
   showSettings: false,
-  turnTimerPref: localStorage.getItem('camelup.turnTimer') !== '0',
+  turnTimerPref: safeLocalGet('camelup.turnTimer') !== '0',
 };
 
 const listeners = new Set<() => void>();
@@ -133,11 +143,24 @@ export const socket = io({ autoConnect: true });
 
 socket.on('connect', () => {
   set({ connected: true });
-  const code = sessionStorage.getItem('camelup.room');
+  const code = safeSessionGet('camelup.room');
   if (code && state.name) {
     socket.emit('room:join', { code, playerId: state.playerId, name: state.name }, (res: any) => {
-      if (!res.ok) sessionStorage.removeItem('camelup.room');
+      if (!res.ok) safeSessionRemove('camelup.room');
     });
+  } else if (discord.isEmbedded && discord.autoRoomCode && state.name.trim()) {
+    socket.emit(
+      'room:joinOrCreate',
+      {
+        code: discord.autoRoomCode,
+        playerId: state.playerId,
+        name: state.name.trim(),
+        turnTimerEnabled: state.turnTimerPref,
+      },
+      (res: any) => {
+        if (res?.ok && res.code) rememberRoom(res.code);
+      },
+    );
   }
 });
 socket.on('disconnect', () => set({ connected: false }));
@@ -225,14 +248,20 @@ function emit(event: string, payload?: unknown): Promise<Res> {
 }
 
 function rememberRoom(code: string) {
-  sessionStorage.setItem('camelup.room', code);
-  const url = new URL(location.href);
-  url.searchParams.set('room', code);
-  history.replaceState(null, '', url);
+  safeSessionSet('camelup.room', code);
+  if (!discord.isEmbedded) {
+    try {
+      const url = new URL(location.href);
+      url.searchParams.set('room', code);
+      history.replaceState(null, '', url);
+    } catch {
+      // Ignore URL replace errors in embedded iframe
+    }
+  }
 }
 
 export function setName(name: string) {
-  localStorage.setItem('camelup.name', name);
+  safeLocalSet('camelup.name', name);
   set({ name });
 }
 
@@ -250,7 +279,7 @@ export async function toggleTurnTimer() {
   sfx.play('click');
   const current = state.room ? state.room.turnTimerEnabled : state.turnTimerPref;
   const next = !current;
-  localStorage.setItem('camelup.turnTimer', next ? '1' : '0');
+  safeLocalSet('camelup.turnTimer', next ? '1' : '0');
   set({ turnTimerPref: next });
   if (state.room) {
     await emit('room:setTimer', { enabled: next });
@@ -271,12 +300,29 @@ export async function joinRoom(code: string) {
   if (res.ok && res.code) rememberRoom(res.code);
 }
 
+export async function joinDiscordChannelRoom() {
+  const code = discord.autoRoomCode ?? 'DISC1';
+  const res = await emit('room:joinOrCreate', {
+    code,
+    playerId: state.playerId,
+    name: state.name,
+    turnTimerEnabled: state.turnTimerPref,
+  });
+  if (res.ok && res.code) rememberRoom(res.code);
+}
+
 export async function leaveRoom() {
   await emit('room:leave');
-  sessionStorage.removeItem('camelup.room');
-  const url = new URL(location.href);
-  url.searchParams.delete('room');
-  history.replaceState(null, '', url);
+  safeSessionRemove('camelup.room');
+  if (!discord.isEmbedded) {
+    try {
+      const url = new URL(location.href);
+      url.searchParams.delete('room');
+      history.replaceState(null, '', url);
+    } catch {
+      // Ignore
+    }
+  }
   set({ room: null, game: null, log: [], lastRoll: null });
 }
 

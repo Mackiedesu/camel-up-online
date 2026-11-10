@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { createRoom, joinRoom, setName, useStore } from '../store';
+import { createRoom, discord, joinDiscordChannelRoom, joinRoom, setName, useStore } from '../store';
 import { CamelIcon } from './CamelIcon';
 import { SettingsButton } from './SettingsMenu';
 import { RACING_CAMELS } from '@camelup/shared';
@@ -7,7 +7,9 @@ import { RACING_CAMELS } from '@camelup/shared';
 export function Home() {
   const name = useStore((s) => s.name);
   const connected = useStore((s) => s.connected);
-  const [code, setCode] = useState(() => new URLSearchParams(location.search).get('room') ?? '');
+  const [code, setCode] = useState(
+    () => new URLSearchParams(location.search).get('room') ?? discord.autoRoomCode ?? '',
+  );
   const [busy, setBusy] = useState(false);
   const canGo = connected && name.trim().length > 0 && !busy;
 
@@ -29,6 +31,11 @@ export function Home() {
         </div>
         <h1>Camel Up</h1>
         <p className="subtitle">Đua lạc đà và cá cược · 2–8 người chơi online</p>
+        {discord.isEmbedded && (
+          <div className="discord-banner">
+            🎮 Chế độ <strong>Discord Activity</strong> · Tự động ghép chung bàn theo kênh Voice
+          </div>
+        )}
 
         <label className="field">
           <span>Tên của bạn</span>
@@ -37,12 +44,28 @@ export function Home() {
             maxLength={20}
             placeholder="Ví dụ: Lạc Đà Vàng"
             onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && canGo) {
+                if (discord.isEmbedded) run(joinDiscordChannelRoom);
+                else run(createRoom);
+              }
+            }}
           />
         </label>
 
-        <button className="btn primary big" disabled={!canGo} onClick={() => run(createRoom)}>
-          Tạo phòng mới
-        </button>
+        {discord.isEmbedded ? (
+          <button
+            className="btn discord-btn big"
+            disabled={!canGo}
+            onClick={() => run(joinDiscordChannelRoom)}
+          >
+            🎮 Vào bàn Discord kênh này ({discord.autoRoomCode})
+          </button>
+        ) : (
+          <button className="btn primary big" disabled={!canGo} onClick={() => run(createRoom)}>
+            Tạo phòng mới
+          </button>
+        )}
 
         <div className="divider">hoặc</div>
 

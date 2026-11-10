@@ -1,4 +1,5 @@
 // Procedural sound effects using Web Audio API (zero external assets).
+import { safeLocalGet, safeLocalSet } from './discord';
 
 type SfxName =
   | 'click'
@@ -15,7 +16,7 @@ type SfxName =
 
 class SoundManager {
   private ctx: AudioContext | null = null;
-  private _muted: boolean = localStorage.getItem('camelup.muted') === '1';
+  private _muted: boolean = safeLocalGet('camelup.muted') === '1';
   private listeners = new Set<() => void>();
 
   get muted() {
@@ -24,7 +25,7 @@ class SoundManager {
 
   toggleMute(): boolean {
     this._muted = !this._muted;
-    localStorage.setItem('camelup.muted', this._muted ? '1' : '0');
+    safeLocalSet('camelup.muted', this._muted ? '1' : '0');
     this.listeners.forEach((l) => l());
     if (!this._muted) this.play('click');
     return this._muted;

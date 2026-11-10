@@ -119,6 +119,43 @@ export class RoomManager {
     return room;
   }
 
+  /** Join a room by code if it exists, or create it with that exact code (used by Discord Activity). */
+  joinOrCreate(
+    rawCode: string,
+    playerId: string,
+    name: string,
+    socketId: string,
+    turnTimerEnabled = true,
+  ): Room {
+    const code = rawCode.toUpperCase();
+    const existingRoom = this.get(code);
+    if (!existingRoom) {
+      const room: Room = {
+        code,
+        hostId: playerId,
+        players: [{ id: playerId, name, socketId }],
+        game: null,
+        lastActivity: Date.now(),
+        turnTimerEnabled,
+        turnDeadline: null,
+        timerHandle: null,
+      };
+      this.rooms.set(room.code, room);
+      return room;
+    }
+    // Ensure unique name if someone in the same Discord channel enters a duplicate name
+    let safeName = name;
+    let suffix = 2;
+    while (
+      existingRoom.players.some(
+        (p) => p.id !== playerId && p.name.toLowerCase() === safeName.toLowerCase(),
+      )
+    ) {
+      safeName = `${name.slice(0, 17)}#${suffix++}`;
+    }
+    return this.join(code, playerId, safeName, socketId);
+  }
+
   /** Player explicitly leaves or disconnects. Returns the room if it still exists. */
   leave(code: string, playerId: string, explicit: boolean, socketId: string): Room | undefined {
     const room = this.get(code);
