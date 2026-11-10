@@ -16,6 +16,7 @@ export interface RoomPlayer {
   id: string;
   name: string;
   socketId: string | null;
+  spectating?: boolean;
 }
 
 export interface Room {
@@ -111,12 +112,19 @@ export class RoomManager {
       if (!room.game) existing.name = name;
       return room;
     }
-    if (room.game) throw new RoomError('Ván đã bắt đầu');
-    if (room.players.length >= MAX_PLAYERS) throw new RoomError(`Phòng đã đủ ${MAX_PLAYERS} người`);
-    if (room.players.some((p) => p.name.toLowerCase() === name.toLowerCase())) {
-      throw new RoomError('Tên đã có người dùng trong phòng');
+    // Ensure unique name if someone enters a duplicate name
+    let safeName = name;
+    let suffix = 2;
+    while (room.players.some((p) => p.name.toLowerCase() === safeName.toLowerCase())) {
+      safeName = `${name.slice(0, 17)}#${suffix++}`;
     }
-    room.players.push({ id: playerId, name, socketId });
+    if (room.game) {
+      // Game already started -> allow joining as a live spectator (inspector)
+      room.players.push({ id: playerId, name: safeName, socketId, spectating: true });
+      return room;
+    }
+    if (room.players.length >= MAX_PLAYERS) throw new RoomError(`Phòng đã đủ ${MAX_PLAYERS} người`);
+    room.players.push({ id: playerId, name: safeName, socketId, spectating: false });
     return room;
   }
 
@@ -169,6 +177,8 @@ export class RoomManager {
     if (!room.game) {
       if (explicit) room.players = room.players.filter((p) => p.id !== playerId);
       else player.socketId = null;
+    } else if (player.spectating) {
+      room.players = room.players.filter((p) => p.id !== playerId);
     } else {
       player.socketId = null;
       // If the player who explicitly left was the active turn player, pass turn to the next connected player
@@ -210,8 +220,9 @@ export class RoomManager {
     if (room.game && room.game.phase === 'playing') throw new RoomError('Ván đang diễn ra');
     // Drop offline players from the lobby before starting
     room.players = room.players.filter((p) => p.socketId !== null);
-    if (room.players.length < MIN_PLAYERS) throw new RoomError(`Cần ít nhất ${MIN_PLAYERS} người`);
-    room.game = createGame(room.players.map((p) => ({ id: p.id, name: p.name })));
+    const activePlayers = room.players.filter((p) => !p.spectating).slice(0, MAX_PLAYERS);
+    if (activePlayers.length < MIN_PLAYERS) throw new RoomError(`Cần ít nhất ${MIN_PLAYERS} người`);
+    room.game = createGame(activePlayers.map((p) => ({ id: p.id, name: p.name })));
     room.lastActivity = Date.now();
     this.syncTurnTimer(room);
     return room;
@@ -223,6 +234,9 @@ export class RoomManager {
     this.clearTimer(room);
     room.game = null;
     room.players = room.players.filter((p) => p.socketId !== null);
+    room.players.forEach((p, idx) => {
+      p.spectating = idx >= MAX_PLAYERS;
+    });
     room.lastActivity = Date.now();
     return room;
   }
@@ -251,6 +265,21 @@ export class RoomManager {
     return room;
   }
 
+  toggleSpectate(code: string, playerId: string): Room {
+    const room = this.mustGet(code);
+    if (room.game) throw new RoomError('Ván đang diễn ra');
+    const p = room.players.find((x) => x.id === playerId);
+    if (!p) throw new RoomError('Không tìm thấy người chơi');
+    const nextSpectating = !p.spectating;
+    if (!nextSpectating) {
+      const activeCount = room.players.filter((x) => !x.spectating).length;
+      if (activeCount >= MAX_PLAYERS) throw new RoomError(`Đã đủ ${MAX_PLAYERS} người chơi`);
+    }
+    p.spectating = nextSpectating;
+    room.lastActivity = Date.now();
+    return room;
+  }
+
   act(code: string, playerId: string, action: GameAction): { room: Room; events: GameEvent[] } {
     const room = this.mustGet(code);
     if (!room.game) throw new RoomError('Ván chưa bắt đầu');
@@ -270,7 +299,12 @@ export class RoomManager {
     return {
       code: room.code,
       hostId: room.hostId,
-      players: room.players.map((p) => ({ id: p.id, name: p.name, connected: p.socketId !== null })),
+      players: room.players.map((p) => ({
+        id: p.id,
+        name: p.name,
+        connected: p.socketId !== null,
+        spectating: Boolean(p.spectating),
+      })),
       status: !room.game ? 'lobby' : room.game.phase === 'playing' ? 'playing' : 'finished',
       turnTimerEnabled: room.turnTimerEnabled,
       turnDeadline: room.turnDeadline,

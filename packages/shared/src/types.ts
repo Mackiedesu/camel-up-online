@@ -105,6 +105,7 @@ export interface RoomPlayerView {
   id: string;
   name: string;
   connected: boolean;
+  spectating?: boolean;
 }
 
 export interface RoomView {

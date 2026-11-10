@@ -17,12 +17,14 @@ interface Props {
   me: string;
   spectatorSide: 1 | -1 | null;
   setSpectatorSide: (s: 1 | -1 | null) => void;
+  onOpenInspect?: () => void;
 }
 
-export function ActionPanel({ game, me, spectatorSide, setSpectatorSide }: Props) {
+export function ActionPanel({ game, me, spectatorSide, setSpectatorSide, onOpenInspect }: Props) {
   const current = game.players[game.currentPlayerIndex];
   const myTurn = current.id === me && game.phase === 'playing';
   const meP = game.players.find((p) => p.id === me);
+  const isWatcher = !meP;
   const [finalColor, setFinalColor] = useState<RacingColor | null>(null);
   const [busy, setBusy] = useState(false);
   const { secondsLeft, progress } = useTurnCountdown();
@@ -45,7 +47,13 @@ export function ActionPanel({ game, me, spectatorSide, setSpectatorSide }: Props
     <div className={`panel actions ${myTurn ? 'my-turn' : ''}`}>
       <div className="turn-banner-wrap">
         <div className="turn-banner">
-          <span>{myTurn ? '⭐ Tới lượt bạn! Chọn 1 hành động' : `Đang chờ ${current.name}…`}</span>
+          <span>
+            {isWatcher
+              ? `👁️ Đang xem ván đấu · Lượt của ${current.name}`
+              : myTurn
+                ? '⭐ Tới lượt bạn! Chọn 1 hành động'
+                : `Đang chờ ${current.name}…`}
+          </span>
           {secondsLeft !== null && (
             <span
               className={`turn-timer-pill ${secondsLeft <= 10 ? 'urgent' : ''}`}
@@ -62,6 +70,11 @@ export function ActionPanel({ game, me, spectatorSide, setSpectatorSide }: Props
               style={{ width: `${progress * 100}%` }}
             />
           </div>
+        )}
+        {isWatcher && (
+          <button className="btn small wide" style={{ marginTop: '0.25rem' }} onClick={onOpenInspect}>
+            🔍 Mở bảng Phân tích & Inspect ván đấu
+          </button>
         )}
       </div>
 

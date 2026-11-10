@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { MAX_PLAYERS, MIN_PLAYERS } from '@camelup/shared';
-import { discord, leaveRoom, pushToast, startGame, useStore } from '../store';
+import { discord, leaveRoom, pushToast, startGame, toggleSpectateMode, useStore } from '../store';
 import { copyToClipboard } from '../discord';
 import { SettingsButton } from './SettingsMenu';
 
@@ -8,7 +8,9 @@ export function Lobby() {
   const room = useStore((s) => s.room)!;
   const me = useStore((s) => s.playerId);
   const isHost = room.hostId === me;
-  const online = room.players.filter((p) => p.connected);
+  const mePlayer = room.players.find((p) => p.id === me);
+  const activePlayers = room.players.filter((p) => p.connected && !p.spectating);
+  const spectators = room.players.filter((p) => p.connected && p.spectating);
   const [busy, setBusy] = useState(false);
 
   const baseUrl = discord.isEmbedded
@@ -51,15 +53,19 @@ export function Lobby() {
           <button className="btn small" onClick={copyCode}>
             🔑 Copy mã phòng
           </button>
+          <button className="btn small" onClick={() => toggleSpectateMode()}>
+            {mePlayer?.spectating ? '🎮 Vào ghế chơi' : '👁️ Chuyển sang Xem'}
+          </button>
           <SettingsButton />
         </div>
 
         <h3>
-          Người chơi ({room.players.length}/{MAX_PLAYERS})
+          Người chơi ({activePlayers.length}/{MAX_PLAYERS})
+          {spectators.length > 0 && <small className="muted"> · 👁️ {spectators.length} người xem</small>}
         </h3>
         <ul className="lobby-players">
           {Array.from({ length: MAX_PLAYERS }, (_, i) => {
-            const p = room.players[i];
+            const p = room.players.filter((x) => !x.spectating)[i];
             return (
               <li key={i} className={p ? (p.connected ? '' : 'offline') : 'empty'}>
                 {p ? (
@@ -80,17 +86,23 @@ export function Lobby() {
           })}
         </ul>
 
+        {spectators.length > 0 && (
+          <p className="muted small" style={{ margin: '0.2rem 0' }}>
+            👁️ Đang ở chế độ Xem (Inspect): {spectators.map((s) => s.name).join(', ')}
+          </p>
+        )}
+
         {isHost ? (
           <button
             className="btn primary big"
-            disabled={online.length < MIN_PLAYERS || busy}
+            disabled={activePlayers.length < MIN_PLAYERS || busy}
             onClick={async () => {
               setBusy(true);
               await startGame();
               setBusy(false);
             }}
           >
-            {online.length < MIN_PLAYERS ? `Cần ít nhất ${MIN_PLAYERS} người` : 'Bắt đầu ván!'}
+            {activePlayers.length < MIN_PLAYERS ? `Cần ít nhất ${MIN_PLAYERS} người chơi` : 'Bắt đầu ván!'}
           </button>
         ) : (
           <p className="muted">Đang chờ chủ phòng bắt đầu…</p>

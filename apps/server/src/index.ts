@@ -197,6 +197,14 @@ io.on('connection', (socket: Socket) => {
     }),
   );
 
+  socket.on('room:toggleSpectate', (_: unknown, ack?: Ack) =>
+    handle(ack, () => {
+      if (!data.roomCode || !data.playerId) throw new RoomError('Bạn chưa vào phòng');
+      const room = rooms.toggleSpectate(data.roomCode, data.playerId);
+      broadcastRoom(room);
+    }),
+  );
+
   socket.on('game:action', (action: GameAction, ack?: Ack) =>
     handle(ack, () => {
       if (!data.roomCode || !data.playerId) throw new RoomError('Bạn chưa vào phòng');

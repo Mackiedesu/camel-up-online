@@ -341,4 +341,5 @@ export async function leaveRoom() {
 export const startGame = () => emit('game:start');
 export const backToLobby = () => emit('game:lobby');
 export const endGameNow = () => emit('game:end');
+export const toggleSpectateMode = () => emit('room:toggleSpectate');
 export const sendAction = (a: GameAction) => emit('game:action', a);

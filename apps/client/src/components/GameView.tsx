@@ -6,6 +6,7 @@ import { ActionPanel } from './ActionPanel';
 import { PlayersPanel } from './PlayersPanel';
 import { GameOver } from './GameOver';
 import { SettingsButton } from './SettingsMenu';
+import { InspectModal } from './InspectModal';
 
 export function GameView() {
   const game = useStore((s) => s.game)!;
@@ -14,8 +15,11 @@ export function GameView() {
   const log = useStore((s) => s.log);
   const [spectatorSide, setSpectatorSide] = useState<1 | -1 | null>(null);
   const [confirmModal, setConfirmModal] = useState<'leave' | 'endGame' | null>(null);
+  const [showInspect, setShowInspect] = useState(false);
 
   const isHost = room.hostId === me;
+  const isWatcher = !game.players.some((p) => p.id === me);
+  const spectators = room.players.filter((p) => p.spectating && p.connected);
   const myTurn = game.players[game.currentPlayerIndex]?.id === me && game.phase === 'playing';
   useEffect(() => {
     if (!myTurn) setSpectatorSide(null);
@@ -41,8 +45,13 @@ export function GameView() {
         <span className="logo">🐪 Camel Up</span>
         <span className="muted">
           Phòng <strong>{room.code}</strong> · Chặng {game.leg} · Lượt {game.turn}
+          {isWatcher && ' · 👁️ Đang xem'}
+          {spectators.length > 0 && ` (${spectators.length} người xem)`}
         </span>
         <div className="row">
+          <button className="btn small" onClick={() => setShowInspect(true)}>
+            🔍 Inspect
+          </button>
           <SettingsButton />
           {isHost && game.phase === 'playing' && (
             <button className="btn small danger-btn" onClick={() => setConfirmModal('endGame')}>
@@ -65,6 +74,7 @@ export function GameView() {
             me={me}
             spectatorSide={spectatorSide}
             setSpectatorSide={setSpectatorSide}
+            onOpenInspect={() => setShowInspect(true)}
           />
           <PlayersPanel game={game} room={room} me={me} />
           <div className="panel log">
@@ -147,6 +157,10 @@ export function GameView() {
             </div>
           </div>
         </div>
+      )}
+
+      {showInspect && (
+        <InspectModal game={game} room={room} me={me} onClose={() => setShowInspect(false)} />
       )}
 
       {game.phase === 'finished' && <GameOver game={game} room={room} me={me} />}
