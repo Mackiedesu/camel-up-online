@@ -139,7 +139,12 @@ function formatEvent(e: GameEvent): string {
 }
 
 /* ---------- Socket ---------- */
-export const socket = io({ autoConnect: true });
+export const socket = io({
+  autoConnect: true,
+  transports: discord.isEmbedded ? ['websocket'] : ['websocket', 'polling'],
+  reconnectionDelay: 2000,
+  reconnectionDelayMax: 6000,
+});
 
 socket.on('connect', () => {
   set({ connected: true });

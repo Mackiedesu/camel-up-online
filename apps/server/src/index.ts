@@ -34,7 +34,11 @@ const httpServer = createServer((req, res) => {
   if (!file.startsWith(CLIENT_DIST) || !existsSync(file) || statSync(file).isDirectory()) {
     file = join(CLIENT_DIST, 'index.html');
   }
-  res.writeHead(200, { 'content-type': MIME[extname(file)] ?? 'application/octet-stream' });
+  const isAsset = url.startsWith('/assets/');
+  res.writeHead(200, {
+    'content-type': MIME[extname(file)] ?? 'application/octet-stream',
+    'cache-control': isAsset ? 'public, max-age=31536000, immutable' : 'no-cache',
+  });
   res.end(readFileSync(file));
 });
 
