@@ -180,6 +180,15 @@ io.on('connection', (socket: Socket) => {
     }),
   );
 
+  socket.on('game:end', (_: unknown, ack?: Ack) =>
+    handle(ack, () => {
+      if (!data.roomCode || !data.playerId) throw new RoomError('Bạn chưa vào phòng');
+      const { room, events } = rooms.endGame(data.roomCode, data.playerId);
+      io.to(room.code).emit('game:events', events);
+      broadcastRoom(room);
+    }),
+  );
+
   socket.on('room:setTimer', (msg: { enabled: boolean }, ack?: Ack) =>
     handle(ack, () => {
       if (!data.roomCode || !data.playerId) throw new RoomError('Bạn chưa vào phòng');

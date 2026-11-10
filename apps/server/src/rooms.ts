@@ -1,6 +1,7 @@
 import {
   applyAction,
   createGame,
+  forceEndGame,
   GameError,
   MAX_PLAYERS,
   MIN_PLAYERS,
@@ -166,12 +167,27 @@ export class RoomManager {
     if (player.socketId !== null && player.socketId !== socketId) return room;
 
     if (!room.game) {
-      // In lobby: disconnects keep the seat briefly? Keep it simple: remove only on explicit leave,
-      // mark offline otherwise (allows refresh).
       if (explicit) room.players = room.players.filter((p) => p.id !== playerId);
       else player.socketId = null;
     } else {
       player.socketId = null;
+      // If the player who explicitly left was the active turn player, pass turn to the next connected player
+      if (explicit && room.game.phase === 'playing') {
+        const curId = room.game.players[room.game.currentPlayerIndex]?.id;
+        if (curId === playerId) {
+          const n = room.game.players.length;
+          for (let step = 1; step < n; step++) {
+            const idx = (room.game.currentPlayerIndex + step) % n;
+            const pid = room.game.players[idx].id;
+            const rp = room.players.find((x) => x.id === pid);
+            if (rp && rp.socketId !== null) {
+              room.game.currentPlayerIndex = idx;
+              this.syncTurnTimer(room);
+              break;
+            }
+          }
+        }
+      }
     }
 
     if (room.players.length === 0 || room.players.every((p) => p.socketId === null)) {
@@ -181,8 +197,8 @@ export class RoomManager {
         return undefined;
       }
     }
-    if (room.hostId === playerId && explicit) {
-      const next = room.players.find((p) => p.socketId) ?? room.players[0];
+    if (room.hostId === playerId) {
+      const next = room.players.find((p) => p.socketId !== null) ?? room.players[0];
       if (next) room.hostId = next.id;
     }
     return room;
@@ -206,7 +222,25 @@ export class RoomManager {
     if (room.hostId !== playerId) throw new RoomError('Chỉ chủ phòng mới làm được');
     this.clearTimer(room);
     room.game = null;
+    room.players = room.players.filter((p) => p.socketId !== null);
+    room.lastActivity = Date.now();
     return room;
+  }
+
+  endGame(code: string, playerId: string): { room: Room; events: GameEvent[] } {
+    const room = this.mustGet(code);
+    if (room.hostId !== playerId) throw new RoomError('Chỉ chủ phòng mới được kết thúc ván');
+    if (!room.game || room.game.phase !== 'playing') throw new RoomError('Ván không còn diễn ra');
+    this.clearTimer(room);
+    try {
+      const { state, events } = forceEndGame(room.game);
+      room.game = state;
+      room.lastActivity = Date.now();
+      return { room, events };
+    } catch (e) {
+      if (e instanceof GameError) throw new RoomError(e.message);
+      throw e;
+    }
   }
 
   setTurnTimer(code: string, enabled: boolean): Room {

@@ -328,6 +328,16 @@ function scoreFinal(state: GameState, events: GameEvent[]) {
   events.push({ type: 'gameOver', ...result });
 }
 
+/** Host action to immediately end the current game and settle scores based on current positions. */
+export function forceEndGame(prev: GameState): { state: GameState; events: GameEvent[] } {
+  if (prev.phase !== 'playing') throw new GameError('Ván đã kết thúc');
+  const state: GameState = structuredClone(prev);
+  const events: GameEvent[] = [];
+  scoreLeg(state, events);
+  scoreFinal(state, events);
+  return { state, events };
+}
+
 /* ------------------------------------------------------------------ */
 /* Actions                                                             */
 /* ------------------------------------------------------------------ */

@@ -103,6 +103,16 @@ h4 {
   border-color: var(--accent-2);
   box-shadow: 0 3px 0 var(--accent-2);
 }
+.btn.danger-btn {
+  background: #ffe5e5;
+  border-color: var(--danger);
+  color: #a8191e;
+  box-shadow: 0 3px 0 var(--danger);
+}
+.confirm-dialog {
+  width: min(420px, 94vw);
+  text-align: center;
+}
 
 input {
   font-family: inherit;

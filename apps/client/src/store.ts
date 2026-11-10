@@ -146,6 +146,8 @@ export const socket = io({
   reconnectionDelayMax: 6000,
 });
 
+let manualLeftDiscord = false;
+
 socket.on('connect', () => {
   set({ connected: true });
   const code = safeSessionGet('camelup.room');
@@ -153,7 +155,7 @@ socket.on('connect', () => {
     socket.emit('room:join', { code, playerId: state.playerId, name: state.name }, (res: any) => {
       if (!res.ok) safeSessionRemove('camelup.room');
     });
-  } else if (discord.isEmbedded && discord.autoRoomCode && state.name.trim()) {
+  } else if (discord.isEmbedded && discord.autoRoomCode && state.name.trim() && !manualLeftDiscord) {
     socket.emit(
       'room:joinOrCreate',
       {
@@ -292,6 +294,7 @@ export async function toggleTurnTimer() {
 }
 
 export async function createRoom() {
+  manualLeftDiscord = false;
   const res = await emit('room:create', {
     playerId: state.playerId,
     name: state.name,
@@ -301,11 +304,13 @@ export async function createRoom() {
 }
 
 export async function joinRoom(code: string) {
+  manualLeftDiscord = false;
   const res = await emit('room:join', { code, playerId: state.playerId, name: state.name });
   if (res.ok && res.code) rememberRoom(res.code);
 }
 
 export async function joinDiscordChannelRoom() {
+  manualLeftDiscord = false;
   const code = discord.autoRoomCode ?? 'DISC1';
   const res = await emit('room:joinOrCreate', {
     code,
@@ -317,7 +322,8 @@ export async function joinDiscordChannelRoom() {
 }
 
 export async function leaveRoom() {
-  await emit('room:leave');
+  sfx.play('click');
+  manualLeftDiscord = true;
   safeSessionRemove('camelup.room');
   if (!discord.isEmbedded) {
     try {
@@ -329,8 +335,10 @@ export async function leaveRoom() {
     }
   }
   set({ room: null, game: null, log: [], lastRoll: null });
+  socket.emit('room:leave', {});
 }
 
 export const startGame = () => emit('game:start');
 export const backToLobby = () => emit('game:lobby');
+export const endGameNow = () => emit('game:end');
 export const sendAction = (a: GameAction) => emit('game:action', a);
