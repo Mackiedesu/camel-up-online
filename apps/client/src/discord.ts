@@ -45,6 +45,42 @@ export function safeSessionRemove(key: string): void {
   }
 }
 
+/**
+ * Reliable clipboard copy that works inside sandboxed iframes (Discord Activity)
+ * as well as regular desktop/mobile browsers.
+ */
+export async function copyToClipboard(text: string): Promise<boolean> {
+  let copied = false;
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed';
+    ta.style.top = '-9999px';
+    ta.style.left = '-9999px';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    ta.setSelectionRange(0, text.length);
+    copied = document.execCommand('copy');
+    document.body.removeChild(ta);
+  } catch {
+    // Fallback to navigator.clipboard below
+  }
+
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      copied = true;
+    }
+  } catch {
+    // Ignore Permissions-Policy errors in iframe if execCommand already succeeded
+  }
+
+  return copied;
+}
+
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
 /** Convert a Discord Activity instance_id into a deterministic 5-char room code. */

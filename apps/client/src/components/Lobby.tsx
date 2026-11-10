@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { MAX_PLAYERS, MIN_PLAYERS } from '@camelup/shared';
-import { leaveRoom, pushToast, startGame, useStore } from '../store';
+import { discord, leaveRoom, pushToast, startGame, useStore } from '../store';
+import { copyToClipboard } from '../discord';
 import { SettingsButton } from './SettingsMenu';
 
 export function Lobby() {
@@ -10,24 +11,45 @@ export function Lobby() {
   const online = room.players.filter((p) => p.connected);
   const [busy, setBusy] = useState(false);
 
-  const link = `${location.origin}${location.pathname}?room=${room.code}`;
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(link);
-      pushToast({ kind: 'info', text: 'Đã copy link mời!' }, 2000);
-    } catch {
-      pushToast({ kind: 'info', text: link }, 6000);
+  const baseUrl = discord.isEmbedded
+    ? 'https://camel-up-online.onrender.com/'
+    : `${location.origin}${location.pathname}`;
+  const link = `${baseUrl}?room=${room.code}`;
+
+  const copyLink = async () => {
+    const ok = await copyToClipboard(link);
+    if (ok) {
+      pushToast({ kind: 'info', text: '✅ Đã copy link mời vào clipboard!' }, 2500);
+    } else {
+      pushToast({ kind: 'info', text: `Link mời: ${link}` }, 6000);
+    }
+  };
+
+  const copyCode = async () => {
+    const ok = await copyToClipboard(room.code);
+    if (ok) {
+      pushToast({ kind: 'info', text: `✅ Đã copy mã phòng: ${room.code}` }, 2500);
     }
   };
 
   return (
     <div className="home">
       <div className="home-card lobby">
-        <p className="subtitle">Mã phòng</p>
-        <div className="room-code">{room.code}</div>
+        <p className="subtitle">Mã phòng (bấm để copy mã)</p>
+        <div
+          className="room-code"
+          style={{ cursor: 'pointer' }}
+          title="Bấm để copy mã phòng"
+          onClick={copyCode}
+        >
+          {room.code}
+        </div>
         <div className="row center">
-          <button className="btn small" onClick={copy}>
+          <button className="btn small" onClick={copyLink}>
             📋 Copy link mời
+          </button>
+          <button className="btn small" onClick={copyCode}>
+            🔑 Copy mã phòng
           </button>
           <SettingsButton />
         </div>
