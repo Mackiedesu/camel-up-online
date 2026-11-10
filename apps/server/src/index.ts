@@ -18,6 +18,7 @@ const MIME: Record<string, string> = {
   '.png': 'image/png',
   '.ico': 'image/x-icon',
   '.json': 'application/json',
+  '.mp3': 'audio/mpeg',
 };
 
 const httpServer = createServer((req, res) => {
@@ -34,7 +35,7 @@ const httpServer = createServer((req, res) => {
   if (!file.startsWith(CLIENT_DIST) || !existsSync(file) || statSync(file).isDirectory()) {
     file = join(CLIENT_DIST, 'index.html');
   }
-  const isAsset = url.startsWith('/assets/');
+  const isAsset = url.startsWith('/assets/') || url.endsWith('.mp3') || url.endsWith('.png');
   res.writeHead(200, {
     'content-type': MIME[extname(file)] ?? 'application/octet-stream',
     'cache-control': isAsset ? 'public, max-age=31536000, immutable' : 'no-cache',

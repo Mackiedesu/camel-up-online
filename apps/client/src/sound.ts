@@ -14,13 +14,52 @@ type SfxName =
   | 'fanfare'
   | 'error';
 
+/** Crossfade loop points for /bgm.mp3 (main piece ends at 02:46.5 before silence gap). */
+const BGM_LOOP_START = 1.2;
+const BGM_LOOP_END = 166.5;
+const BGM_CROSSFADE_SEC = 6.5;
+
+function loadInitialBgmVolume(): number {
+  const saved = safeLocalGet('camelup.bgmVolume');
+  if (saved !== null) {
+    const n = Number(saved);
+    if (!Number.isNaN(n)) return Math.min(1, Math.max(0, n));
+  }
+  return 0.45;
+}
+
 class SoundManager {
   private ctx: AudioContext | null = null;
   private _muted: boolean = safeLocalGet('camelup.muted') === '1';
+  private _bgmVolume: number = loadInitialBgmVolume();
+  private _lastNonZeroBgm: number = this._bgmVolume > 0 ? this._bgmVolume : 0.45;
   private listeners = new Set<() => void>();
+
+  // Dual HTMLAudioElement decks for seamless crossfade looping
+  private decks: [HTMLAudioElement, HTMLAudioElement] | null = null;
+  private activeDeckIdx: 0 | 1 = 0;
+  private crossfading = false;
+  private bgmStarted = false;
+  private tickTimer: ReturnType<typeof setInterval> | null = null;
+
+  constructor() {
+    if (typeof window !== 'undefined') {
+      const unlock = () => {
+        if (this._bgmVolume > 0 && !this.bgmStarted) {
+          this.startBgm();
+        }
+      };
+      window.addEventListener('pointerdown', unlock, { passive: true });
+      window.addEventListener('keydown', unlock, { passive: true });
+    }
+  }
 
   get muted() {
     return this._muted;
+  }
+
+  get bgmVolume() {
+    return this._bgmVolume;
   }
 
   toggleMute(): boolean {
@@ -29,6 +68,126 @@ class SoundManager {
     this.listeners.forEach((l) => l());
     if (!this._muted) this.play('click');
     return this._muted;
+  }
+
+  setBgmVolume(vol: number) {
+    const clamped = Math.min(1, Math.max(0, Math.round(vol * 100) / 100));
+    this._bgmVolume = clamped;
+    if (clamped > 0) this._lastNonZeroBgm = clamped;
+    safeLocalSet('camelup.bgmVolume', String(clamped));
+    this.listeners.forEach((l) => l());
+
+    if (clamped <= 0) {
+      this.pauseBgm();
+    } else if (!this.bgmStarted) {
+      this.startBgm();
+    } else {
+      this.applyCurrentDeckVolumes();
+    }
+  }
+
+  toggleBgmMute() {
+    if (this._bgmVolume > 0) {
+      this.setBgmVolume(0);
+    } else {
+      this.setBgmVolume(this._lastNonZeroBgm || 0.45);
+    }
+  }
+
+  private ensureDecks(): [HTMLAudioElement, HTMLAudioElement] | null {
+    if (typeof window === 'undefined' || typeof Audio === 'undefined') return null;
+    if (!this.decks) {
+      const a = new Audio('/bgm.mp3');
+      const b = new Audio('/bgm.mp3');
+      a.preload = 'auto';
+      b.preload = 'auto';
+      a.loop = false;
+      b.loop = false;
+      this.decks = [a, b];
+    }
+    return this.decks;
+  }
+
+  startBgm() {
+    if (this._bgmVolume <= 0) return;
+    const decks = this.ensureDecks();
+    if (!decks) return;
+
+    const active = decks[this.activeDeckIdx];
+    if (active.currentTime < BGM_LOOP_START || active.currentTime >= BGM_LOOP_END) {
+      active.currentTime = BGM_LOOP_START;
+    }
+    active.volume = this._bgmVolume;
+    active
+      .play()
+      .then(() => {
+        this.bgmStarted = true;
+        if (!this.tickTimer) {
+          this.tickTimer = setInterval(() => this.tickCrossfade(), 100);
+        }
+      })
+      .catch(() => {
+        // Will retry on next user interaction
+      });
+  }
+
+  private pauseBgm() {
+    this.bgmStarted = false;
+    this.crossfading = false;
+    if (this.tickTimer) {
+      clearInterval(this.tickTimer);
+      this.tickTimer = null;
+    }
+    if (this.decks) {
+      this.decks[0].pause();
+      this.decks[1].pause();
+    }
+  }
+
+  private applyCurrentDeckVolumes() {
+    if (!this.decks) return;
+    const active = this.decks[this.activeDeckIdx];
+    const next = this.decks[(1 - this.activeDeckIdx) as 0 | 1];
+    if (!this.crossfading) {
+      active.volume = this._bgmVolume;
+      next.volume = 0;
+    } else {
+      const fadeStart = BGM_LOOP_END - BGM_CROSSFADE_SEC;
+      const p = Math.min(1, Math.max(0, (active.currentTime - fadeStart) / BGM_CROSSFADE_SEC));
+      active.volume = this._bgmVolume * Math.cos(p * Math.PI * 0.5);
+      next.volume = this._bgmVolume * Math.sin(p * Math.PI * 0.5);
+    }
+  }
+
+  private tickCrossfade() {
+    if (!this.decks || !this.bgmStarted || this._bgmVolume <= 0) return;
+    const active = this.decks[this.activeDeckIdx];
+    const nextIdx = (1 - this.activeDeckIdx) as 0 | 1;
+    const next = this.decks[nextIdx];
+    const fadeStart = BGM_LOOP_END - BGM_CROSSFADE_SEC;
+
+    if (active.currentTime >= fadeStart) {
+      if (!this.crossfading) {
+        this.crossfading = true;
+        next.currentTime = BGM_LOOP_START;
+        next.volume = 0;
+        next.play().catch(() => {});
+      }
+      const p = Math.min(1, Math.max(0, (active.currentTime - fadeStart) / BGM_CROSSFADE_SEC));
+      // Equal-power cosine/sine crossfade for completely natural transition
+      active.volume = this._bgmVolume * Math.cos(p * Math.PI * 0.5);
+      next.volume = this._bgmVolume * Math.sin(p * Math.PI * 0.5);
+
+      if (p >= 1 || active.currentTime >= BGM_LOOP_END || active.paused) {
+        active.pause();
+        active.volume = 0;
+        next.volume = this._bgmVolume;
+        this.activeDeckIdx = nextIdx;
+        this.crossfading = false;
+      }
+    } else {
+      active.volume = this._bgmVolume;
+    }
   }
 
   subscribe(fn: () => void) {

@@ -47,6 +47,10 @@ export function SettingsModal() {
     (l) => sfx.subscribe(l),
     () => sfx.muted,
   );
+  const bgmVolume = useSyncExternalStore(
+    (l) => sfx.subscribe(l),
+    () => sfx.bgmVolume,
+  );
 
   if (!show) return null;
 
@@ -63,19 +67,51 @@ export function SettingsModal() {
         <div className="settings-body">
           <div className="setting-item">
             <div className="setting-info">
-              <strong>🔊 Âm thanh hiệu ứng</strong>
+              <strong>🔊 Hiệu ứng âm thanh (Sound Effects)</strong>
               <small className="muted">
-                {muted ? 'Đang tắt tiếng' : 'Đang bật âm thanh xúc xắc, bước chân và thông báo'}
+                {muted ? 'Đang tắt tiếng hiệu ứng' : 'Âm thanh lắc xúc xắc, bước chân lạc đà và thông báo lượt'}
               </small>
             </div>
             <button
               className={`toggle-switch ${!muted ? 'on' : ''}`}
               onClick={() => sfx.toggleMute()}
-              aria-label="Bật/tắt âm thanh"
+              aria-label="Bật/tắt hiệu ứng âm thanh"
             >
               <span className="toggle-knob" />
               <span className="toggle-label">{!muted ? 'BẬT' : 'TẮT'}</span>
             </button>
+          </div>
+
+          <div className="setting-item setting-item-col">
+            <div className="setting-row-top">
+              <div className="setting-info">
+                <strong>🎵 Nhạc nền (Background Music)</strong>
+                <small className="muted">
+                  Tự động chuyển tiếp mượt (Crossfade Loop) · Âm lượng: <strong>{Math.round(bgmVolume * 100)}%</strong>
+                </small>
+              </div>
+              <button
+                className="btn small"
+                onClick={() => sfx.toggleBgmMute()}
+                title={bgmVolume > 0 ? 'Tắt nhanh nhạc nền' : 'Bật lại nhạc nền'}
+              >
+                {bgmVolume > 0 ? '🎵' : '🔇'}
+              </button>
+            </div>
+            <div className="bgm-slider-row">
+              <span className="small muted">0%</span>
+              <input
+                type="range"
+                min={0}
+                max={100}
+                step={1}
+                value={Math.round(bgmVolume * 100)}
+                onChange={(e) => sfx.setBgmVolume(Number(e.target.value) / 100)}
+                className="bgm-slider"
+                aria-label="Âm lượng nhạc nền"
+              />
+              <span className="small muted">100%</span>
+            </div>
           </div>
 
           <div className="setting-item">
